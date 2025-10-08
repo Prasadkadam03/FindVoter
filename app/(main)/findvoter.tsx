@@ -1,3 +1,4 @@
+// app/(main)/FindVoter.tsx
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
@@ -6,79 +7,10 @@ import { Feather } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface VoterData {
-  voter_code: string;
-  name: string;
-  husband_father_name: string;
-  mobile: string;
-  house_number: string;
-  age: number;
-  gender: string;
-  image_name: string;
-  section_name: string;
-  main_town_village: string;
-  police_station: string;
-  taluka: string;
-  district: string;
-  pin_code: string;
-}
-
-interface APIResponse {
-  success: boolean;
-  data: VoterData[];
-  message: string;
-}
-
-const fetchVoterDetails = async (searchParams: any): Promise<VoterData> => {
-  const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-  const ENDPOINT = '/voter/search';
-
-  if (!BASE_URL) {
-    throw new Error("EXPO_PUBLIC_API_URL is not configured.");
-  }
-
-  const API_URL = `${BASE_URL.replace(/\/+$/, '')}${ENDPOINT}`;
-
-  const payload: { [key: string]: any } = {};
-
-  Object.keys(searchParams).forEach(key => {
-    const value = searchParams[key];
-    if (value !== '' && value !== undefined && value !== null) {
-      payload[key] = value;
-    }
-  });
-
-  if (Object.keys(payload).length === 0) {
-    throw new Error("No valid search criteria provided.");
-  }
-
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Server error: Status ${response.status}. ${errorBody.substring(0, 100)}...`);
-  }
-
-  const result: APIResponse = await response.json();
-
-  if (!result.success || result.data.length === 0) {
-    throw new Error(result.message || 'Voter details not found or search failed.');
-  }
-
-  return result.data[0];
-};
-
-
 export default function FindVoter() {
   const [voterId, setVoterId] = useState('');
   const [name, setName] = useState('');
-  const [husband_father_name, setHusband_father_name] = useState('');
+  const [fatherName, setFatherName] = useState('');
   const [gender, setGender] = useState('');
   const [age, setAge] = useState('');
   const [mobile, setMobile] = useState('');
@@ -87,12 +19,11 @@ export default function FindVoter() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-
   const handleSearch = async () => {
     const trimmedVoterId = voterId.trim();
     const trimmedName = name.trim();
-    const trimmedHusbandFatherName = husband_father_name.trim();
-    
+    const trimmedFatherName = fatherName.trim();
+
     if (!trimmedVoterId && !trimmedName && !mobile) {
       Alert.alert('Missing Fields', 'At least Voter ID or Name is required.');
       return;
@@ -105,47 +36,26 @@ export default function FindVoter() {
     const searchParams = {
       voterId: trimmedVoterId.toUpperCase(),
       name: trimmedName.toUpperCase(),
-      husband_father_name: trimmedHusbandFatherName.toUpperCase(),
+      husband_father_name: trimmedFatherName.toUpperCase(), 
       gender: normalizedGender,
       age,
       mobile: mobile.trim(),
     };
 
-
-    try {
-      const voterDetails = await fetchVoterDetails(searchParams);
-
-      router.push({
-        pathname: '../components/UserDetails',
-        params: {
-          voterId: voterDetails.voter_code, 
-          name: voterDetails.name,
-          husband_father_name: voterDetails.husband_father_name,
-          mobile: voterDetails.mobile,
-          gender: voterDetails.gender, // 'F' or 'M'
-          age: String(voterDetails.age),
-          houseNumber: voterDetails.house_number,
-          sectionName: voterDetails.section_name,
-          town: voterDetails.main_town_village,
-          policeStation: voterDetails.police_station,
-          taluka: voterDetails.taluka,
-          district: voterDetails.district,
-          pinCode: voterDetails.pin_code,
-          image: voterDetails.image_name,
-        },
-      });
-
-    } catch (error) {
-      console.error('API Search Failed:', error);
-      Alert.alert('Search Failed', (error as Error).message || 'An unknown network error occurred.');
-    } finally {
-      setLoading(false);
-    }
+    router.push({ pathname: '/(main)/voterlist', params: searchParams });
+    setLoading(false);
   };
 
-  const renderInputField = (placeholder: string, value: string, onChangeText: (text: string) => void, iconName: keyof typeof Feather.glyphMap, keyboardType: 'default' | 'numeric' | 'phone-pad' = 'default') => (
+  const renderInputField = (
+    label: string,
+    placeholder: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    iconName: keyof typeof Feather.glyphMap,
+    keyboardType: 'default' | 'numeric' | 'phone-pad' = 'default'
+  ) => (
     <View>
-      <Text style={styles.label}>{placeholder.replace('Enter ', '').replace("'s Name", "").replace(' No.', '')}</Text>
+      <Text style={styles.label}>{label}</Text>
       <View style={styles.inputContainer}>
         <Feather name={iconName} size={20} color={Colors.textMuted} style={styles.inputIcon} />
         <TextInput
@@ -162,10 +72,7 @@ export default function FindVoter() {
 
   return (
     <ScrollView
-      contentContainerStyle={[
-        styles.contentContainer,
-        { paddingBottom: insets.bottom + 20 }
-      ]}
+      contentContainerStyle={[styles.contentContainer, { paddingBottom: insets.bottom + 20 }]}
       style={styles.container}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -173,19 +80,15 @@ export default function FindVoter() {
       <Text style={styles.heading}>Find Voter</Text>
       <Text style={styles.subHeading}>Enter details to search the voter list</Text>
 
-      {renderInputField("Enter Voter ID", voterId, setVoterId, 'user')}
-      {renderInputField("Enter Name", name, setName, 'user')}
-      {renderInputField("Enter Husband's / Father's Name", husband_father_name, setHusband_father_name, 'users')}
+      {renderInputField('Voter ID', 'Enter Voter ID', voterId, setVoterId, 'user')}
+      {renderInputField('Name', 'Enter Name', name, setName, 'user')}
+      {renderInputField("Husband's / Father's Name", "Enter Husband's / Father's Name", fatherName, setFatherName, 'users')}
 
       <View>
         <Text style={styles.label}>Gender</Text>
         <View style={styles.pickerContainer}>
           <Feather name="list" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-          <Picker
-            selectedValue={gender}
-            onValueChange={(itemValue) => setGender(itemValue)}
-            style={styles.picker}
-          >
+          <Picker selectedValue={gender} onValueChange={(itemValue) => setGender(itemValue)} style={styles.picker}>
             <Picker.Item label="Select Gender" value="" color={Colors.textMuted} />
             <Picker.Item label="Male" value="male" />
             <Picker.Item label="Female" value="female" />
@@ -193,24 +96,22 @@ export default function FindVoter() {
         </View>
       </View>
 
-      {renderInputField("Enter Age", age, setAge, 'calendar', 'numeric')}
-      {renderInputField("Enter Mobile No.", mobile, setMobile, 'phone', 'phone-pad')}
+      {renderInputField('Age', 'Enter Age', age, setAge, 'calendar', 'numeric')}
+      {renderInputField('Mobile No.', 'Enter Mobile No.', mobile, setMobile, 'phone', 'phone-pad')}
+
+      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSearch} disabled={loading}>
+        {loading ? <ActivityIndicator size="small" color={Colors.background} /> : <Text style={styles.buttonText}>Search</Text>}
+      </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, (loading) && styles.buttonDisabled]}
-        onPress={handleSearch}
-        disabled={loading}
+        style={[styles.button, { marginTop: 10, backgroundColor: Colors.accent }]}
+        onPress={() => router.push('/(main)/voterlist')}
       >
-        {loading ? (
-          <ActivityIndicator size="small" color={Colors.background} />
-        ) : (
-          <Text style={styles.buttonText}>Search</Text>
-        )}
+        <Text style={styles.buttonText}>View Full Voter List</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {

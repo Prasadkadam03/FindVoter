@@ -14,8 +14,7 @@ export default function GlobalLayout() {
         tabBarStyle: {
             backgroundColor: Colors.background, 
             borderTopColor: Colors.borderDefault, 
-            minHeight: 60, // Use minHeight
-            // Let the navigation container handle bottom safe area padding
+            minHeight: 60, 
         },
         tabBarLabelStyle: {
             fontSize: 12, 

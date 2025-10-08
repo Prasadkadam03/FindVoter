@@ -24,7 +24,7 @@ export default function UserDetails() {
   const params = useLocalSearchParams();
   const {
     voterId, name, fatherName, mobile, age, gender,
-    houseNumber, sectionName, town, policeStation, taluka, district, pinCode, image
+    houseNumber, sectionName, town, policeStation, taluka, district, pinCode
   } = params;
 
   const router = useRouter();
@@ -68,12 +68,6 @@ export default function UserDetails() {
 
           <div class="heading">Voter Profile</div>
           <div class="subHeading">Detailed information for the requested voter.</div>
-
-          <div class="voterIdCard">
-            <div class="voterIdLabel">Voter ID</div>
-            <div class="voterIdValue">${voterId}</div>
-            ${image ? `<div style="font-size:12px; margin-top:5px;">Image: ${image}</div>` : ''}
-          </div>
 
           <div class="card">
             <div class="cardTitle">Personal Details</div>
@@ -130,7 +124,6 @@ export default function UserDetails() {
       <View style={styles.voterIdCard}>
         <Text style={styles.voterIdLabel}>Voter ID</Text>
         <Text style={styles.voterIdValue}>{voterId}</Text>
-        {image && <Text style={{ color: Colors.background, fontSize: 12, marginTop: 5 }}>Image: {image}</Text>}
       </View>
 
       <View style={styles.detailsCard}>

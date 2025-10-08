@@ -1,157 +1,136 @@
-import React, { useState, useEffect, Key } from 'react';
+// app/(main)/voterlist.tsx
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchVoterList, Voter } from '../../lib/api';
 
-interface VoterData {
-  id: Key | null | undefined;
-  voter_code: string;
-  name: string;
-  husband_father_name: string;
-  mobile: string;
-  house_number: string;
-  age: number;
-  gender: string;
-  image_name: string;
-  section_name: string;
-  main_town_village: string;
-  police_station: string;
-  taluka: string;
-  district: string;
-  pin_code: string;
-}
-
-interface APIResponse {
-  success: boolean;
-  data: VoterData[];
-  message: string;
-}
-
-const fetchVoterListDemo = async (): Promise<VoterData[]> => {
-  const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-  const ENDPOINT = '/voter/search';
-
-  if (!BASE_URL) {
-    throw new Error("EXPO_PUBLIC_API_URL is not configured.");
-  }
-
-  const API_URL = `${BASE_URL.replace(/\/+$/, '')}${ENDPOINT}`;
-
-  const payload = {}; 
-
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload), 
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Server error: Status ${response.status}. ${errorBody.substring(0, 100)}...`);
-  }
-
-  const result: APIResponse = await response.json();
-
-  if (!result.success || result.data.length === 0) {
-    throw new Error(result.message || 'No voters found in the list.');
-  }
-
-  return result.data;
-};
-
-
-interface DetailRowProps {
-  label: string;
-  value: string | string[] | number | undefined;
-}
-
-const DetailRow: React.FC<DetailRowProps> = ({ label, value }) => (
+const DetailRow = ({ label, value }: { label: string; value?: string | number | null }) => (
   <View style={styles.detailRow}>
     <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue}>{String(value) || 'N/A'}</Text>
+    <Text style={styles.detailValue}>{(value ?? 'N/A').toString()}</Text>
   </View>
 );
 
-const VoterCard: React.FC<{ voter: VoterData }> = ({ voter }) => {
-    const displayGender = (voter.gender === 'M' ? 'Male' : (voter.gender === 'F' ? 'Female' : voter.gender));
-
-    return (
-        <View style={styles.voterCard}>
-            <View style={styles.voterIdCard}>
-                <Text style={styles.voterNameLabel}>Voter Name</Text>
-                <Text style={styles.voterNameValue}>{voter.name}</Text>
-            </View>
-            <View style={styles.detailsCard}>
-                <DetailRow label="ID" value={voter.voter_code} />
-                <DetailRow label="Father/Husband" value={voter.husband_father_name} />
-                <DetailRow label="Gender" value={displayGender} />
-                <DetailRow label="Age" value={voter.age} />
-                <DetailRow label="Mobile" value={voter.mobile} />
-            </View>
-        </View>
-    );
+const VoterCard = ({ voter, onPress }: { voter: Voter; onPress: () => void }) => {
+  const displayGender = voter.gender === 'M' ? 'Male' : voter.gender === 'F' ? 'Female' : voter.gender;
+  return (
+    <TouchableOpacity style={styles.voterCard} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.voterIdCard}>
+        <Text style={styles.voterNameLabel}>Voter Name</Text>
+        <Text style={styles.voterNameValue}>{voter.name}</Text>
+      </View>
+      <View style={styles.detailsCard}>
+        <DetailRow label="ID" value={voter.voter_code} />
+        <DetailRow label="Father/Husband" value={voter.husband_father_name} />
+        <DetailRow label="Gender" value={displayGender} />
+        <DetailRow label="Age" value={voter.age} />
+        <DetailRow label="Mobile" value={voter.mobile} />
+      </View>
+    </TouchableOpacity>
+  );
 };
 
-
-export default function UserDetails() {
+export default function VoterListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  const [voterList, setVoterList] = useState<VoterData[]>([]);
+  const params = useLocalSearchParams();
+
+  const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const search = {
+    voterId: typeof params.voterId === 'string' ? params.voterId : undefined,
+    name: typeof params.name === 'string' ? params.name : undefined,
+    husband_father_name: typeof params.husband_father_name === 'string' ? params.husband_father_name : undefined,
+    gender: typeof params.gender === 'string' ? (params.gender as 'M' | 'F' | '') : undefined,
+    age: typeof params.age === 'string' ? params.age : undefined,
+    mobile: typeof params.mobile === 'string' ? params.mobile : undefined,
+  };
+
+  const hasSearch =
+    !!search.voterId || !!search.name || !!search.husband_father_name || !!search.gender || !!search.age || !!search.mobile;
+
   useEffect(() => {
-    const loadVoters = async () => {
+    const load = async () => {
       try {
-        const data = await fetchVoterListDemo();
-        setVoterList(data);
-      } catch (error) {
-        console.error('List Load Failed:', error);
-        Alert.alert('Load Failed', (error as Error).message);
+        setLoading(true);
+        const list = await fetchVoterList(hasSearch ? search : undefined);
+        setVoters(list);
+      } catch (err: any) {
+        console.error('Voter list fetch failed:', err);
+        Alert.alert('Load Failed', err?.message || 'Unable to load voters.');
       } finally {
         setLoading(false);
       }
     };
-    loadVoters();
-  }, []); 
+    load();
+  }, [params?.voterId, params?.name, params?.husband_father_name, params?.gender, params?.age, params?.mobile]);
 
-  const handleBack = () => {
-    router.back(); 
+  const openDetails = (v: Voter) => {
+    router.push({
+      pathname: '/components/UserDetails',
+      params: {
+        voterId: v.voter_code,
+        name: v.name,
+        fatherName: v.husband_father_name, // NOTE: details screen expects fatherName
+        mobile: v.mobile,
+        gender: v.gender, // 'M' | 'F'
+        age: String(v.age),
+        houseNumber: v.house_number,
+        sectionName: v.section_name,
+        town: v.main_town_village,
+        policeStation: v.police_station,
+        taluka: v.taluka,
+        district: v.district,
+        pinCode: v.pin_code,
+      },
+    });
   };
 
   return (
-    <ScrollView 
-        style={styles.container} 
-        contentContainerStyle={[
-            styles.contentContainer, 
-            { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }
-        ]}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.contentContainer, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
     >
-      
-      <TouchableOpacity style={[styles.backButton, { top: insets.top + 10 }]} onPress={handleBack}>
+      <TouchableOpacity style={[styles.backButton, { top: insets.top + 10 }]} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={24} color={Colors.primary} />
       </TouchableOpacity>
 
-      <Text style={styles.heading}>Voter List </Text>
-      <Text style={styles.subHeading}>Displaying all fetched voters.</Text>
-      
+      <Text style={styles.heading}>Voter List</Text>
+      <Text style={styles.subHeading}>
+        {loading
+          ? 'Loading...'
+          : hasSearch
+            ? `Showing ${voters.length} result(s) for your search`
+            : `Showing ${voters.length} voter(s)`}
+      </Text>
+
+      <TouchableOpacity
+        style={[styles.button, { marginTop: 10, backgroundColor: Colors.accent }]}
+        onPress={() => router.push('/(main)/voterlist')}
+      >
+        <Text style={styles.buttonText}>View Full Voter List</Text>
+      </TouchableOpacity>
+
       {loading ? (
         <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Fetching all voters...</Text>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>{hasSearch ? 'Searching voters...' : 'Fetching all voters...'}</Text>
         </View>
-      ) : voterList.length > 0 ? (
-        voterList.map((voter) => (
-            <VoterCard key={voter.id} voter={voter} />
+      ) : voters.length ? (
+        voters.map((v) => (
+          <VoterCard
+            key={v.voter_code /* use a stable key */}
+            voter={v}
+            onPress={() => openDetails(v)}
+          />
         ))
       ) : (
-        <Text style={styles.noDataText}>No voters found or API returned an empty list.</Text>
+        <Text style={styles.noDataText}>No voters found.</Text>
       )}
-
-      {/* Removed the 'View Address' button as requested */}
-      
     </ScrollView>
   );
 }
@@ -159,7 +138,7 @@ export default function UserDetails() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.surface, 
+    backgroundColor: Colors.surface,
   },
   contentContainer: {
     paddingHorizontal: 20,
@@ -196,7 +175,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   voterIdCard: {
-    backgroundColor: Colors.primary, 
+    backgroundColor: Colors.primary,
     padding: 15,
     borderRadius: 8,
     marginBottom: 10,
@@ -204,7 +183,7 @@ const styles = StyleSheet.create({
   },
   voterNameLabel: {
     fontSize: 12,
-    color: Colors.background, 
+    color: Colors.background,
     opacity: 0.8,
     marginBottom: 2,
     textTransform: 'uppercase',
@@ -212,7 +191,7 @@ const styles = StyleSheet.create({
   voterNameValue: {
     fontSize: 24,
     fontWeight: '800',
-    color: Colors.background, 
+    color: Colors.background,
     letterSpacing: 1,
   },
   detailsCard: {
@@ -244,12 +223,25 @@ const styles = StyleSheet.create({
     height: 200,
   },
   loadingText: {
-      marginTop: 10,
-      color: Colors.textMuted,
+    marginTop: 10,
+    color: Colors.textMuted,
   },
   noDataText: {
-      textAlign: 'center',
-      marginTop: 50,
-      color: Colors.error,
-  }
+    textAlign: 'center',
+    marginTop: 50,
+    color: Colors.error,
+  }, button: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 25,
+    marginBottom: 5,
+  },
+  buttonText: {
+    color: Colors.background,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
