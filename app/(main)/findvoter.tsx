@@ -102,14 +102,13 @@ export default function FindVoter() {
 
     const normalizedGender = gender === 'male' ? 'M' : (gender === 'female' ? 'F' : '');
 
-    // Include all form fields for the payload construction (which omits empty ones)
     const searchParams = {
       voterId: trimmedVoterId.toUpperCase(),
       name: trimmedName.toUpperCase(),
       husband_father_name: trimmedHusbandFatherName.toUpperCase(),
       gender: normalizedGender,
       age,
-      mobile: mobile.trim(), // Keep mobile here so it can be omitted if empty
+      mobile: mobile.trim(),
     };
 
 
@@ -146,7 +145,7 @@ export default function FindVoter() {
 
   const renderInputField = (placeholder: string, value: string, onChangeText: (text: string) => void, iconName: keyof typeof Feather.glyphMap, keyboardType: 'default' | 'numeric' | 'phone-pad' = 'default') => (
     <View>
-      <Text style={styles.label}>{placeholder.replace('Enter ', '').replace(' ID', '').replace("'s Name", "").replace(' No.', '')}</Text>
+      <Text style={styles.label}>{placeholder.replace('Enter ', '').replace("'s Name", "").replace(' No.', '')}</Text>
       <View style={styles.inputContainer}>
         <Feather name={iconName} size={20} color={Colors.textMuted} style={styles.inputIcon} />
         <TextInput
@@ -229,11 +228,13 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     marginTop: 10,
     marginLeft: 5,
+    textAlign: 'center',
   },
   subHeading: {
     fontSize: 16,
     color: Colors.textMuted,
     marginBottom: 20,
+    textAlign: 'center',
   },
   label: {
     fontSize: 14,

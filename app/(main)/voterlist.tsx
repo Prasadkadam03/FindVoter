@@ -175,14 +175,14 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     marginBottom: 5,
     marginLeft: 5,
-    marginTop: 10,
-    textAlign: 'left',
+    marginTop: 20,
+    textAlign: 'center',
   },
   subHeading: {
     fontSize: 16,
     color: Colors.textMuted,
     marginBottom: 20,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   voterCard: {
     marginBottom: 30,
