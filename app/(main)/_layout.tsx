@@ -1,10 +1,11 @@
-// app/(main)/_layout.tsx
 import { Tabs } from 'expo-router';
 import '../../global.css';
 import { Feather } from '@expo/vector-icons';
-import Colors from '../constants/Colors';
+import useThemeColors from '../hooks/useThemeColors';
 
 export default function GlobalLayout() {
+  const Colors = useThemeColors();
+
   return (
     <Tabs
       screenOptions={{
@@ -17,27 +18,27 @@ export default function GlobalLayout() {
             minHeight: 60, 
         },
         tabBarLabelStyle: {
-            fontSize: 12, 
-            fontWeight: '600',
+          fontSize: 12,
+          fontWeight: '600',
         },
       }}
     >
       <Tabs.Screen
-        name="findvoter" 
-        options={{ 
-            title: 'Find Voter',
-            tabBarIcon: ({ color, size }) => (
-                <Feather name="search" color={color} size={size} />
-            ) 
+        name="findvoter"
+        options={{
+          title: 'Find Voter',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="search" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="voterlist" 
-        options={{ 
-            title: 'Voter List',
-            tabBarIcon: ({ color, size }) => (
-                <Feather name="list" color={color} size={size} />
-            ) 
+        name="voterlist"
+        options={{
+          title: 'Voter List',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="list" color={color} size={size} />
+          ),
         }}
       />
     </Tabs>

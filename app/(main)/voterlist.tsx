@@ -1,27 +1,58 @@
 // app/(main)/voterlist.tsx
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState, memo, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchVoterList, Voter } from '../../lib/api';
+import useThemeColors from '../hooks/useThemeColors';
+import { fetchVoterList, Voter, errorToUserMessage } from '../../lib/api';
 
-const DetailRow = ({ label, value }: { label: string; value?: string | number | null }) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue}>{(value ?? 'N/A').toString()}</Text>
-  </View>
-);
-
-const VoterCard = ({ voter, onPress }: { voter: Voter; onPress: () => void }) => {
-  const displayGender = voter.gender === 'M' ? 'Male' : voter.gender === 'F' ? 'Female' : voter.gender;
+const DetailRow = ({ label, value }: { label: string; value?: string | number | null }) => {
+  const Colors = useThemeColors();
   return (
-    <TouchableOpacity style={styles.voterCard} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.voterIdCard}>
-        <Text style={styles.voterNameLabel}>Voter Name</Text>
-        <Text style={styles.voterNameValue}>{voter.name}</Text>
+    <View style={styles.detailRow}>
+      <Text style={[styles.detailLabel, { color: Colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.detailValue, { color: Colors.textDark }]}>
+        {(value ?? 'N/A').toString()}
+      </Text>
+    </View>
+  );
+};
+
+// Memoized card for perf on long lists
+const VoterCard = memo(function VoterCard({
+  voter,
+  onPress,
+}: {
+  voter: Voter;
+  onPress: () => void;
+}) {
+  const Colors = useThemeColors();
+  const displayGender =
+    voter.gender === 'M' ? 'Male' : voter.gender === 'F' ? 'Female' : voter.gender;
+
+  return (
+    <TouchableOpacity
+      style={[styles.voterCard, { backgroundColor: Colors.background, shadowColor: '#000' }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+    >
+      <View style={[styles.voterIdCard, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
+        <Text style={[styles.voterNameLabel, { color: Colors.background }]}>Voter Name</Text>
+        <Text style={[styles.voterNameValue, { color: Colors.background }]} numberOfLines={1}>
+          {voter.name}
+        </Text>
       </View>
+
       <View style={styles.detailsCard}>
         <DetailRow label="ID" value={voter.voter_code} />
         <DetailRow label="Father/Husband" value={voter.husband_father_name} />
@@ -31,9 +62,10 @@ const VoterCard = ({ voter, onPress }: { voter: Voter; onPress: () => void }) =>
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 export default function VoterListScreen() {
+  const Colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -41,207 +73,224 @@ export default function VoterListScreen() {
   const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Accept both possible param keys for father/husband
+  const hfParam =
+    typeof params.husband_father_name === 'string'
+      ? params.husband_father_name
+      : typeof params.fatherName === 'string'
+      ? params.fatherName
+      : undefined;
+
   const search = {
     voterId: typeof params.voterId === 'string' ? params.voterId : undefined,
     name: typeof params.name === 'string' ? params.name : undefined,
-    husband_father_name: typeof params.husband_father_name === 'string' ? params.husband_father_name : undefined,
+    husband_father_name: hfParam,
     gender: typeof params.gender === 'string' ? (params.gender as 'M' | 'F' | '') : undefined,
     age: typeof params.age === 'string' ? params.age : undefined,
     mobile: typeof params.mobile === 'string' ? params.mobile : undefined,
   };
 
   const hasSearch =
-    !!search.voterId || !!search.name || !!search.husband_father_name || !!search.gender || !!search.age || !!search.mobile;
+    !!search.voterId ||
+    !!search.name ||
+    !!search.husband_father_name ||
+    !!search.gender ||
+    !!search.age ||
+    !!search.mobile;
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const list = await fetchVoterList(hasSearch ? search : undefined);
+      setVoters(list);
+    } catch (err) {
+      console.error('Voter list fetch failed:', err);
+      Alert.alert('Load Failed', errorToUserMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [hasSearch, search?.voterId, search?.name, search?.husband_father_name, search?.gender, search?.age, search?.mobile]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const list = await fetchVoterList(hasSearch ? search : undefined);
-        setVoters(list);
-      } catch (err: any) {
-        console.error('Voter list fetch failed:', err);
-        Alert.alert('Load Failed', err?.message || 'Unable to load voters.');
-      } finally {
-        setLoading(false);
-      }
-    };
     load();
-  }, [params?.voterId, params?.name, params?.husband_father_name, params?.gender, params?.age, params?.mobile]);
+  }, [load]);
 
-  const openDetails = (v: Voter) => {
-    router.push({
-      pathname: '/components/UserDetails',
-      params: {
-        voterId: v.voter_code,
-        name: v.name,
-        fatherName: v.husband_father_name, // NOTE: details screen expects fatherName
-        mobile: v.mobile,
-        gender: v.gender, // 'M' | 'F'
-        age: String(v.age),
-        houseNumber: v.house_number,
-        sectionName: v.section_name,
-        town: v.main_town_village,
-        policeStation: v.police_station,
-        taluka: v.taluka,
-        district: v.district,
-        pinCode: v.pin_code,
-      },
-    });
-  };
+  const openDetails = useCallback(
+    (v: Voter) => {
+      router.push({
+        pathname: '/components/UserDetails',
+        params: {
+          voterId: v.voter_code,
+          name: v.name,
+          fatherName: v.husband_father_name, // details screen expects fatherName
+          mobile: v.mobile,
+          gender: v.gender, // 'M' | 'F'
+          age: String(v.age),
+          houseNumber: v.house_number,
+          sectionName: v.section_name,
+          town: v.main_town_village,
+          policeStation: v.police_station,
+          taluka: v.taluka,
+          district: v.district,
+          pinCode: v.pin_code,
+        },
+      });
+    },
+    [router]
+  );
+
+  const keyExtractor = useCallback((v: Voter) => v.voter_code, []);
+  const renderItem = useCallback(
+    ({ item }: { item: Voter }) => <VoterCard voter={item} onPress={() => openDetails(item)} />,
+    [openDetails]
+  );
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.contentContainer, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
-    >
-      <TouchableOpacity style={[styles.backButton, { top: insets.top + 10 }]} onPress={() => router.back()}>
+    <View style={[styles.container, { backgroundColor: Colors.surface }]}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 10 }]}
+        onPress={() => router.back()}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
         <Ionicons name="arrow-back" size={24} color={Colors.primary} />
       </TouchableOpacity>
 
-      <Text style={styles.heading}>Voter List</Text>
-      <Text style={styles.subHeading}>
-        {loading
-          ? 'Loading...'
-          : hasSearch
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + 20, paddingHorizontal: 20, backgroundColor: 'transparent' },
+        ]}
+      >
+        <Text style={[styles.heading, { color: Colors.primary }]}>Voter List</Text>
+        <Text style={[styles.subHeading, { color: Colors.textMuted }]}>
+          {loading
+            ? 'Loading...'
+            : hasSearch
             ? `Showing ${voters.length} result(s) for your search`
             : `Showing ${voters.length} voter(s)`}
-      </Text>
+        </Text>
 
-      <TouchableOpacity
-        style={[styles.button, { marginTop: 10, backgroundColor: Colors.accent }]}
-        onPress={() => router.push('/(main)/voterlist')}
-      >
-        <Text style={styles.buttonText}>View Full Voter List</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: Colors.accent }]}
+          onPress={() => router.push('/(main)/voterlist')}
+          activeOpacity={0.9}
+        >
+          <Text style={[styles.buttonText, { color: Colors.background }]}>View Full Voter List</Text>
+        </TouchableOpacity>
+      </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>{hasSearch ? 'Searching voters...' : 'Fetching all voters...'}</Text>
+          <Text style={[styles.loadingText, { color: Colors.textMuted }]}>
+            {hasSearch ? 'Searching voters...' : 'Fetching all voters...'}
+          </Text>
         </View>
-      ) : voters.length ? (
-        voters.map((v) => (
-          <VoterCard
-            key={v.voter_code /* use a stable key */}
-            voter={v}
-            onPress={() => openDetails(v)}
-          />
-        ))
       ) : (
-        <Text style={styles.noDataText}>No voters found.</Text>
+        <FlatList
+          data={voters}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingBottom: insets.bottom + 20, paddingHorizontal: 20 },
+          ]}
+          ListEmptyComponent={
+            <Text style={[styles.noDataText, { color: Colors.error }]}>No voters found.</Text>
+          }
+          showsVerticalScrollIndicator={false}
+          onEndReachedThreshold={0.4}
+          // If API supports pagination, hook onEndReached here.
+          refreshing={loading}
+          // onRefresh={load}
+        />
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-  },
-  contentContainer: {
-    paddingHorizontal: 20,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 20,
-    zIndex: 10,
-  },
+  container: { flex: 1 },
+  header: { alignItems: 'center' },
+  contentContainer: { paddingTop: 10 },
+  backButton: { position: 'absolute', left: 20, zIndex: 10 },
   heading: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primary,
     marginBottom: 5,
-    marginLeft: 5,
     marginTop: 20,
     textAlign: 'center',
   },
   subHeading: {
     fontSize: 16,
-    color: Colors.textMuted,
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   voterCard: {
-    marginBottom: 30,
+    marginBottom: 22,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: Colors.background,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
   },
   voterIdCard: {
-    backgroundColor: Colors.primary,
     padding: 15,
     borderRadius: 8,
     marginBottom: 10,
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
   },
   voterNameLabel: {
     fontSize: 12,
-    color: Colors.background,
     opacity: 0.8,
     marginBottom: 2,
     textTransform: 'uppercase',
   },
   voterNameValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    color: Colors.background,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  detailsCard: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+  detailsCard: { paddingHorizontal: 10, paddingVertical: 5 },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
   detailLabel: {
     fontSize: 14,
-    color: Colors.textMuted,
     fontWeight: '500',
     flex: 1,
   },
   detailValue: {
     fontSize: 14,
-    color: Colors.textDark,
     fontWeight: '600',
     flex: 1,
     textAlign: 'right',
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    height: 200,
+    justifyContent: 'center',
+    paddingTop: 60,
   },
-  loadingText: {
-    marginTop: 10,
-    color: Colors.textMuted,
-  },
+  loadingText: { marginTop: 10 },
   noDataText: {
     textAlign: 'center',
-    marginTop: 50,
-    color: Colors.error,
-  }, button: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 15,
+    marginTop: 40,
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 25,
-    marginBottom: 5,
+    marginTop: 10,
+    marginBottom: 8,
   },
-  buttonText: {
-    color: Colors.background,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  buttonText: { fontSize: 16, fontWeight: '700' },
 });
