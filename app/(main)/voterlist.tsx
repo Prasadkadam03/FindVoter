@@ -3,26 +3,24 @@ import React, { useEffect, useState, memo, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   FlatList,
+  TextInput,
+  useColorScheme as rnUseColorScheme,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useThemeColors from '../hooks/useThemeColors';
 import { fetchVoterList, Voter, errorToUserMessage } from '../../lib/api';
+import 'nativewind';
 
 const DetailRow = ({ label, value }: { label: string; value?: string | number | null }) => {
-  const Colors = useThemeColors();
   return (
-    <View style={styles.detailRow}>
-      <Text style={[styles.detailLabel, { color: Colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.detailValue, { color: Colors.textDark }]}>
-        {(value ?? 'N/A').toString()}
-      </Text>
+    <View className="flex-row justify-between py-1">
+      <Text className="text-sm font-medium text-textmuted dark:text-dark-textmuted">{label}</Text>
+      <Text className="text-sm font-semibold text-textdark dark:text-dark-text">{(value ?? 'N/A').toString()}</Text>
     </View>
   );
 };
@@ -35,25 +33,23 @@ const VoterCard = memo(function VoterCard({
   voter: Voter;
   onPress: () => void;
 }) {
-  const Colors = useThemeColors();
-  const displayGender =
-    voter.gender === 'M' ? 'Male' : voter.gender === 'F' ? 'Female' : voter.gender;
+  const displayGender = voter.gender === 'M' ? 'Male' : voter.gender === 'F' ? 'Female' : voter.gender;
 
   return (
     <TouchableOpacity
-      style={[styles.voterCard, { backgroundColor: Colors.background, shadowColor: '#000' }]}
+      className="mb-5 rounded-xl p-3 bg-background dark:bg-dark-surface shadow-md"
       onPress={onPress}
       activeOpacity={0.85}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
     >
-      <View style={[styles.voterIdCard, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
-        <Text style={[styles.voterNameLabel, { color: Colors.background }]}>Voter Name</Text>
-        <Text style={[styles.voterNameValue, { color: Colors.background }]} numberOfLines={1}>
+      <View className="rounded-lg p-3 mb-3 items-center bg-primary dark:bg-accent">
+        <Text className="text-xs uppercase opacity-80 text-background">Voter Name</Text>
+        <Text className="text-xl font-extrabold text-background mt-1" numberOfLines={1}>
           {voter.name}
         </Text>
       </View>
 
-      <View style={styles.detailsCard}>
+      <View className="px-1">
         <DetailRow label="ID" value={voter.voter_code} />
         <DetailRow label="Father/Husband" value={voter.husband_father_name} />
         <DetailRow label="Gender" value={displayGender} />
@@ -65,43 +61,29 @@ const VoterCard = memo(function VoterCard({
 });
 
 export default function VoterListScreen() {
-  const Colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const scheme = rnUseColorScheme();
+
+  const iconPrimaryColor = scheme === 'dark' ? '#66A3FF' : '#0B3B77'; // matches Colors.primary / Dark.primary
+  const iconMutedColor = scheme === 'dark' ? '#9CA3AF' : '#6B7280';
 
   const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchName, setSearchName] = useState('');
 
-  // Accept both possible param keys for father/husband
-  const hfParam =
-    typeof params.husband_father_name === 'string'
-      ? params.husband_father_name
-      : typeof params.fatherName === 'string'
-      ? params.fatherName
-      : undefined;
+  useEffect(() => {
+    if (typeof params.name === 'string' && params.name.length > 0) {
+      setSearchName(params.name);
+    }
+  }, [params.name]);
 
-  const search = {
-    voterId: typeof params.voterId === 'string' ? params.voterId : undefined,
-    name: typeof params.name === 'string' ? params.name : undefined,
-    husband_father_name: hfParam,
-    gender: typeof params.gender === 'string' ? (params.gender as 'M' | 'F' | '') : undefined,
-    age: typeof params.age === 'string' ? params.age : undefined,
-    mobile: typeof params.mobile === 'string' ? params.mobile : undefined,
-  };
-
-  const hasSearch =
-    !!search.voterId ||
-    !!search.name ||
-    !!search.husband_father_name ||
-    !!search.gender ||
-    !!search.age ||
-    !!search.mobile;
-
-  const load = useCallback(async () => {
+  const load = useCallback(async (searchQuery?: string) => {
     try {
       setLoading(true);
-      const list = await fetchVoterList(hasSearch ? search : undefined);
+      const query = searchQuery ? { name: searchQuery } : undefined;
+      const list = await fetchVoterList(query);
       setVoters(list);
     } catch (err) {
       console.error('Voter list fetch failed:', err);
@@ -109,7 +91,7 @@ export default function VoterListScreen() {
     } finally {
       setLoading(false);
     }
-  }, [hasSearch, search?.voterId, search?.name, search?.husband_father_name, search?.gender, search?.age, search?.mobile]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -122,9 +104,9 @@ export default function VoterListScreen() {
         params: {
           voterId: v.voter_code,
           name: v.name,
-          fatherName: v.husband_father_name, // details screen expects fatherName
+          fatherName: v.husband_father_name,
           mobile: v.mobile,
-          gender: v.gender, // 'M' | 'F'
+          gender: v.gender,
           age: String(v.age),
           houseNumber: v.house_number,
           sectionName: v.section_name,
@@ -139,6 +121,15 @@ export default function VoterListScreen() {
     [router]
   );
 
+  const handleSearch = () => {
+    load(searchName.trim());
+  };
+
+  const handleReset = () => {
+    setSearchName('');
+    load();
+  };
+
   const keyExtractor = useCallback((v: Voter) => v.voter_code, []);
   const renderItem = useCallback(
     ({ item }: { item: Voter }) => <VoterCard voter={item} onPress={() => openDetails(item)} />,
@@ -146,44 +137,53 @@ export default function VoterListScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.surface }]}>
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top + 10 }]}
-        onPress={() => router.back()}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      >
-        <Ionicons name="arrow-back" size={24} color={Colors.primary} />
-      </TouchableOpacity>
+    <View className="flex-1 bg-surface dark:bg-dark-background">
 
-      <View
-        style={[
-          styles.header,
-          { paddingTop: insets.top + 20, paddingHorizontal: 20, backgroundColor: 'transparent' },
-        ]}
-      >
-        <Text style={[styles.heading, { color: Colors.primary }]}>Voter List</Text>
-        <Text style={[styles.subHeading, { color: Colors.textMuted }]}>
-          {loading
-            ? 'Loading...'
-            : hasSearch
-            ? `Showing ${voters.length} result(s) for your search`
-            : `Showing ${voters.length} voter(s)`}
+      {/* Header */}
+      <View className="items-center pt-6 px-5" style={{ paddingTop: insets.top + 20 }}>
+        <Text className="text-3xl font-extrabold text-center text-primary dark:text-accent">Voter List</Text>
+        <Text className="text-base text-center text-textmuted dark:text-dark-textmuted mt-1 mb-4">
+          {loading ? 'Loading...' : `Showing ${voters.length} results`}
         </Text>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: Colors.accent }]}
-          onPress={() => router.push('/(main)/voterlist')}
-          activeOpacity={0.9}
-        >
-          <Text style={[styles.buttonText, { color: Colors.background }]}>View Full Voter List</Text>
-        </TouchableOpacity>
+        {/* Search Input */}
+        <TextInput
+          className="w-full border border-primary dark:border-accent rounded-lg px-4 py-3 text-base text-textdark dark:text-dark-text bg-background dark:bg-dark-surface"
+          placeholder="Search by name"
+          placeholderTextColor={scheme === 'dark' ? '#9CA3AF' : '#9CA3AF'}
+          value={searchName}
+          onChangeText={setSearchName}
+          returnKeyType="search"
+          onSubmitEditing={handleSearch}
+          style={{ borderColor: undefined }} 
+        />
+
+        {/* Buttons row */}
+        <View className="flex-row w-full mt-3 mb-2">
+          <TouchableOpacity
+            className="flex-1 rounded-lg py-3 mr-2 mx-4 items-center justify-center bg-primary dark:bg-accent"
+            onPress={handleSearch}
+            activeOpacity={0.85}
+          >
+            <Text className="text-base font-bold text-background">Search</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="flex-1 rounded-lg py-3 ml-2 mx-4 items-center justify-center bg-accent dark:bg-primary"
+            onPress={handleReset}
+            activeOpacity={0.85}
+          >
+            <Text className="text-base font-bold text-background">Reset</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
+      {/* Content */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={[styles.loadingText, { color: Colors.textMuted }]}>
-            {hasSearch ? 'Searching voters...' : 'Fetching all voters...'}
+        <View className="items-center justify-center pt-16">
+          <ActivityIndicator size="large" color={iconPrimaryColor} />
+          <Text className="mt-3 text-textmuted dark:text-dark-textmuted">
+            {searchName ? 'Searching voters...' : 'Fetching all voters...'}
           </Text>
         </View>
       ) : (
@@ -191,106 +191,16 @@ export default function VoterListScreen() {
           data={voters}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          contentContainerStyle={[
-            styles.contentContainer,
-            { paddingBottom: insets.bottom + 20, paddingHorizontal: 20 },
-          ]}
-          ListEmptyComponent={
-            <Text style={[styles.noDataText, { color: Colors.error }]}>No voters found.</Text>
-          }
+          contentContainerStyle={{
+            paddingTop: 10,
+            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: 20,
+          }}
+          ListEmptyComponent={<Text className="text-center text-error mt-10">No voters found.</Text>}
           showsVerticalScrollIndicator={false}
           onEndReachedThreshold={0.4}
-          // If API supports pagination, hook onEndReached here.
-          refreshing={loading}
-          // onRefresh={load}
         />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { alignItems: 'center' },
-  contentContainer: { paddingTop: 10 },
-  backButton: { position: 'absolute', left: 20, zIndex: 10 },
-  heading: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  subHeading: {
-    fontSize: 16,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  voterCard: {
-    marginBottom: 22,
-    padding: 10,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  voterIdCard: {
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  voterNameLabel: {
-    fontSize: 12,
-    opacity: 0.8,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-  },
-  voterNameValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  detailsCard: { paddingHorizontal: 10, paddingVertical: 5 },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-  },
-  loadingText: { marginTop: 10 },
-  noDataText: {
-    textAlign: 'center',
-    marginTop: 40,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  buttonText: { fontSize: 16, fontWeight: '700' },
-});

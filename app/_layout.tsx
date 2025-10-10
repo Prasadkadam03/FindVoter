@@ -1,29 +1,26 @@
 // app/_layout.tsx
 import React from 'react';
-import { LogBox, StatusBar } from 'react-native';
+import { StatusBar, useColorScheme as rnUseColorScheme } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import useThemeColors from './hooks/useThemeColors';
-
-// Suppress non-critical warnings in development
-if (__DEV__) {
-  LogBox.ignoreLogs(['SafeAreaView has been deprecated']);
-}
+import 'nativewind';
 
 export default function RootLayout() {
-  const Colors = useThemeColors();
+  const scheme = rnUseColorScheme(); // 'light' | 'dark'
 
   return (
     <SafeAreaProvider>
       <StatusBar
-        barStyle={Colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'}
-        backgroundColor={Colors.background}
+        barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme === 'dark' ? '#0B1220' : '#FFFFFF'}
       />
 
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: Colors.background },
+          contentStyle: {
+            backgroundColor: scheme === 'dark' ? '#0B1220' : '#FFFFFF',
+          },
         }}
       >
         <Stack.Screen name="index" />

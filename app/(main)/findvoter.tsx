@@ -1,12 +1,9 @@
-// app/(main)/FindVoter.tsx
 import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
   ScrollView,
   Alert,
   KeyboardAvoidingView,
@@ -16,11 +13,8 @@ import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useThemeColors from '../hooks/useThemeColors';
 
 export default function FindVoter() {
-  const Colors = useThemeColors();
-
   const [voterId, setVoterId] = useState('');
   const [name, setName] = useState('');
   const [fatherName, setFatherName] = useState('');
@@ -32,8 +26,9 @@ export default function FindVoter() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const handleSearch = async () => {
-    if (submitting) return; // debounce / lock
+  const handleSearch = () => {
+    if (submitting) return;
+
     const trimmedVoterId = voterId.trim();
     const trimmedName = name.trim();
     const trimmedFatherName = fatherName.trim();
@@ -44,6 +39,7 @@ export default function FindVoter() {
     }
 
     setSubmitting(true);
+
     try {
       const normalizedGender =
         gender === 'male' ? 'M' : gender === 'female' ? 'F' : '';
@@ -51,7 +47,7 @@ export default function FindVoter() {
       const searchParams = {
         voterId: trimmedVoterId.toUpperCase(),
         name: trimmedName.toUpperCase(),
-        husband_father_name: trimmedFatherName.toUpperCase(), // ✅ unified param
+        husband_father_name: trimmedFatherName.toUpperCase(),
         gender: normalizedGender as 'M' | 'F' | '',
         age,
         mobile: mobile.trim(),
@@ -63,35 +59,34 @@ export default function FindVoter() {
     }
   };
 
-  const renderInputField = (
-    label: string,
-    placeholder: string,
-    value: string,
-    onChangeText: (text: string) => void,
-    iconName: keyof typeof Feather.glyphMap,
-    keyboardType: 'default' | 'numeric' | 'phone-pad' = 'default'
-  ) => (
-    <View>
-      <Text style={[styles.label, { color: Colors.textDark }]}>{label}</Text>
-      <View
-        style={[
-          styles.inputContainer,
-          { borderColor: Colors.borderDefault, backgroundColor: Colors.background, shadowColor: '#000' },
-        ]}
-      >
-        <Feather
-          name={iconName}
-          size={20}
-          color={Colors.textMuted}
-          style={styles.inputIcon}
-        />
+  const InputField = ({
+    label,
+    placeholder,
+    value,
+    onChangeText,
+    icon,
+    keyboardType = 'default',
+  }: {
+    label: string;
+    placeholder: string;
+    value: string;
+    onChangeText: (text: string) => void;
+    icon: keyof typeof Feather.glyphMap;
+    keyboardType?: 'default' | 'numeric' | 'phone-pad';
+  }) => (
+    <View className="mb-4">
+      <Text className="text-sm font-medium mb-2 text-textdark dark:text-dark-text">
+        {label}
+      </Text>
+      <View className="flex-row items-center border border-border dark:border-dark-border bg-background dark:bg-dark-surface rounded-lg px-4 h-[55px] shadow-sm">
+        <Feather name={icon} size={20} className="text-textmuted dark:text-dark-textmuted mr-3" />
         <TextInput
-          style={[styles.input, { color: Colors.textDark }]}
+          className="flex-1 text-base text-textdark dark:text-dark-text"
           placeholder={placeholder}
+          placeholderTextColor="#9CA3AF"
+          keyboardType={keyboardType}
           value={value}
           onChangeText={onChangeText}
-          keyboardType={keyboardType}
-          placeholderTextColor={Colors.textMuted}
           returnKeyType="search"
           onSubmitEditing={handleSearch}
         />
@@ -101,90 +96,98 @@ export default function FindVoter() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.kav, { backgroundColor: Colors.background }]}
+      className="flex-1 bg-background dark:bg-dark-background"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <ScrollView
-        contentContainerStyle={[
-          styles.contentContainer,
-          { paddingBottom: insets.bottom + 20, backgroundColor: Colors.background },
-        ]}
-        style={[styles.container, { backgroundColor: Colors.background }]}
+        className="flex-1 px-5 bg-background dark:bg-dark-background"
+        contentContainerStyle={{ paddingTop: 20, paddingBottom: insets.bottom + 20 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.heading, { color: Colors.primary }]}>Find Voter</Text>
-        <Text style={[styles.subHeading, { color: Colors.textMuted }]}>
+        <Text className="text-[30px] font-extrabold text-center text-primary dark:text-accent mb-1">
+          Find Voter
+        </Text>
+        <Text className="text-base text-center text-textmuted dark:text-dark-textmuted mb-6">
           Enter details to search the voter list
         </Text>
 
-        {renderInputField('Voter ID', 'Enter Voter ID', voterId, setVoterId, 'user')}
-        {renderInputField('Name', 'Enter Name', name, setName, 'user')}
-        {renderInputField(
-          "Husband's / Father's Name",
-          "Enter Husband's / Father's Name",
-          fatherName,
-          setFatherName,
-          'users'
-        )}
+        <InputField
+          label="Voter ID"
+          placeholder="Enter Voter ID"
+          value={voterId}
+          onChangeText={setVoterId}
+          icon="user"
+        />
 
-        <View>
-          <Text style={[styles.label, { color: Colors.textDark }]}>Gender</Text>
-          <View
-            style={[
-              styles.pickerContainer,
-              { borderColor: Colors.borderDefault, backgroundColor: Colors.background, shadowColor: '#000' },
-            ]}
-          >
-            <Feather
-              name="list"
-              size={20}
-              color={Colors.textMuted}
-              style={styles.inputIcon}
-            />
+        <InputField
+          label="Name"
+          placeholder="Enter Name"
+          value={name}
+          onChangeText={setName}
+          icon="user"
+        />
+
+        <InputField
+          label="Husband's / Father's Name"
+          placeholder="Enter Husband's / Father's Name"
+          value={fatherName}
+          onChangeText={setFatherName}
+          icon="users"
+        />
+
+        <View className="mb-4">
+          <Text className="text-sm font-medium mb-2 text-textdark dark:text-dark-text">Gender</Text>
+          <View className="flex-row items-center border border-border dark:border-dark-border bg-background dark:bg-dark-surface rounded-lg px-2 h-[55px] shadow-sm">
+            <Feather name="list" size={20} className="text-textmuted dark:text-dark-textmuted mr-2" />
             <Picker
               selectedValue={gender}
               onValueChange={(itemValue) => setGender(itemValue)}
-              style={[styles.picker, { color: Colors.textDark }]}
-              dropdownIconColor={Colors.textMuted}
+              style={{ flex: 1, color: '#1F2937' }} // fallback color
+              dropdownIconColor="#6B7280"
             >
-              <Picker.Item label="Select Gender" value="" color={Colors.textMuted} />
+              <Picker.Item label="Select Gender" value="" />
               <Picker.Item label="Male" value="male" />
               <Picker.Item label="Female" value="female" />
             </Picker>
           </View>
         </View>
 
-        {renderInputField('Age', 'Enter Age', age, setAge, 'calendar', 'numeric')}
-        {renderInputField('Mobile No.', 'Enter Mobile No.', mobile, setMobile, 'phone', 'phone-pad')}
+        <InputField
+          label="Age"
+          placeholder="Enter Age"
+          value={age}
+          onChangeText={setAge}
+          icon="calendar"
+          keyboardType="numeric"
+        />
+
+        <InputField
+          label="Mobile No."
+          placeholder="Enter Mobile No."
+          value={mobile}
+          onChangeText={setMobile}
+          icon="phone"
+          keyboardType="phone-pad"
+        />
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            {
-              backgroundColor: submitting ? Colors.buttonDisabled : Colors.primary,
-            },
-          ]}
           onPress={handleSearch}
           disabled={submitting}
-          activeOpacity={0.85}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          className={`mt-6 py-4 rounded-lg items-center justify-center ${
+            submitting ? 'bg-disabled' : 'bg-primary dark:bg-accent'
+          }`}
         >
-          {submitting ? (
-            <ActivityIndicator size="small" color={Colors.background} />
-          ) : (
-            <Text style={[styles.buttonText, { color: Colors.background }]}>Search</Text>
-          )}
+          <Text className="text-lg font-bold text-background dark:text-dark-background">
+            {submitting ? 'Searching...' : 'Search'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.button, { marginTop: 10, backgroundColor: Colors.accent }]}
           onPress={() => router.push('/(main)/voterlist')}
-          activeOpacity={0.9}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          className="mt-4 py-4 rounded-lg items-center justify-center bg-accent dark:bg-primary active:opacity-90"
         >
-          <Text style={[styles.buttonText, { color: Colors.background }]}>
+          <Text className="text-lg font-bold text-background dark:text-dark-background">
             View Full Voter List
           </Text>
         </TouchableOpacity>
@@ -192,84 +195,3 @@ export default function FindVoter() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  kav: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-  },
-  heading: {
-    fontSize: 30,
-    fontWeight: '800',
-    marginBottom: 6,
-    marginTop: 10,
-    marginLeft: 5,
-    textAlign: 'center',
-    letterSpacing: 0.2,
-  },
-  subHeading: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 14,
-    marginTop: 15,
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    height: 55,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    height: '100%',
-    padding: 0,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-    height: 55,
-    paddingHorizontal: 5,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  picker: {
-    flex: 1,
-    height: 55,
-  },
-  button: {
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 25,
-    marginBottom: 5,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});

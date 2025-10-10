@@ -24,20 +24,20 @@ export default function GlobalLayout() {
       }}
     >
       <Tabs.Screen
-        name="findvoter"
-        options={{
-          title: 'Find Voter',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="search" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="voterlist"
         options={{
           title: 'Voter List',
           tabBarIcon: ({ color, size }) => (
             <Feather name="list" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="findvoter"
+        options={{
+          title: 'Find Voter',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="search" color={color} size={size} />
           ),
         }}
       />
