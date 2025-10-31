@@ -102,6 +102,7 @@ export default function VoterListScreen() {
       router.push({
         pathname: '/components/UserDetails',
         params: {
+          id: v.id,
           voterId: v.voter_code,
           name: v.name,
           fatherName: v.husband_father_name,

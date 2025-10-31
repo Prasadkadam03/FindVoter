@@ -1,11 +1,12 @@
-// app/lib/api.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import * as Application from 'expo-application';
+import { Alert, Platform } from 'react-native';
 
 export type SearchParams = {
   voterId?: string;
   name?: string;
   husband_father_name?: string;
-  gender?: 'M' | 'F' | '';
+  gender?: 'M' | 'F' | string;
   age?: string | number;
   mobile?: string;
 };
@@ -35,7 +36,7 @@ type APIResponse<T> = {
 };
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const ENDPOINT = '/voter/search';
+const ENDPOINT = '/api/voter/search';
 
 // Tunables
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -120,7 +121,7 @@ function isVoterArray(x: any): x is Voter[] {
   return Array.isArray(x) && x.every(v => v && typeof v === 'object' && typeof v.voter_code === 'string');
 }
 
-/** Parse body safely, with special cases for empty/204 and non-JSON */
+/** Parse body safely */
 async function parseBodySafe(res: Response): Promise<any | undefined | string> {
   const ct = res.headers.get('content-type') || '';
   const hasBody = res.status !== 204;
@@ -128,7 +129,6 @@ async function parseBodySafe(res: Response): Promise<any | undefined | string> {
 
   if (ct.includes('application/json')) {
     try {
-      // some servers send empty string with JSON ct 🤦
       const txt = await res.text();
       if (!txt) return undefined;
       return JSON.parse(txt);
@@ -140,7 +140,6 @@ async function parseBodySafe(res: Response): Promise<any | undefined | string> {
       });
     }
   } else {
-    // return text (trimmed) so callers can log
     const t = await res.text().catch(() => '');
     return t?.slice(0, 2000);
   }
@@ -151,7 +150,6 @@ function delay(ms: number) {
 }
 
 function jitter(ms: number) {
-  // +/- 30% jitter
   const delta = ms * 0.3;
   return Math.max(0, ms + (Math.random() * 2 - 1) * delta);
 }
@@ -166,43 +164,60 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit & { 
   }
 }
 
+/** RN/Hermes friendly abort detection */
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as any;
+  return e.name === 'AbortError' || (typeof e.message === 'string' && /abort/i.test(e.message));
+}
+
 function retryAfterMs(res?: Response) {
   if (!res) return undefined;
   const ra = res.headers.get('Retry-After');
   if (!ra) return undefined;
-  // header can be seconds or HTTP-date — we support seconds only for simplicity
   const secs = Number(ra);
   return Number.isFinite(secs) ? secs * 1000 : undefined;
 }
 
 function shouldRetry(err: unknown, res?: Response) {
-  // Retry on transient HTTP
   if (res && RETRY_STATUS.has(res.status)) return true;
-  // RN fetch timeouts surface as AbortError (DOMException) or sometimes just TypeError
-  if (err instanceof DOMException && err.name === 'AbortError') return true;
-  if (err instanceof TypeError) return true; // network fetch error in RN
+  if (isAbortError(err)) return true;
+  if (err instanceof TypeError) return true;
   return false;
 }
 
 export type FetchOpts = {
   timeoutMs?: number;
-  retries?: number; // per-call override
-  allowEmpty?: boolean; // default true: return empty list instead of throwing
+  retries?: number;
+  allowEmpty?: boolean;
 };
 
 export async function fetchVoterList(
   search?: SearchParams,
   opts?: FetchOpts
 ): Promise<Voter[]> {
-  const payload = buildPayload(search ?? {});
+
+  const androidId = await Application.getAndroidId();
+  if (!androidId) {
+    throw new ApiError('ANDROID_ID unavailable — must run on Android.', { code: 'CONFIG' });
+  }
+
+  const payload = buildPayload({
+    androidId,
+    voterId: search?.voterId,
+    name: search?.name,
+    fatherName: search?.husband_father_name,
+    gender: search?.gender,
+    age: search?.age,
+    mobile: search?.mobile,
+  });
+
   const target = url();
 
   let attempt = 0;
   const maxRetries = Math.max(0, opts?.retries ?? MAX_RETRIES);
   const allowEmpty = opts?.allowEmpty ?? true;
   let lastErr: unknown;
-
-  // We'll capture request ID if server provides one
   let requestId: string | undefined;
 
   while (attempt <= maxRetries) {
@@ -216,11 +231,9 @@ export async function fetchVoterList(
       });
 
       requestId = res.headers.get('x-request-id') ?? res.headers.get('x-amzn-requestid') ?? undefined;
-
       const body = await parseBodySafe(res);
 
       if (!res.ok) {
-        // Classify common statuses for better UX & retry logic
         const fromJson =
           typeof body === 'object' && body ? (body as any).message as string | undefined : undefined;
 
@@ -244,10 +257,7 @@ export async function fetchVoterList(
         if (attempt < maxRetries && shouldRetry(err, res)) {
           attempt++;
           const serverDelay = retryAfterMs(res);
-          const backoff = Math.min(
-            MAX_BACKOFF_MS,
-            BASE_BACKOFF_MS * attempt * attempt
-          );
+          const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * attempt * attempt);
           const wait = serverDelay ?? jitter(backoff);
           await delay(wait);
           continue;
@@ -255,9 +265,7 @@ export async function fetchVoterList(
         throw err;
       }
 
-      // Success branch
       if (typeof body !== 'object') {
-        // Accept undefined (e.g., 204) as empty list if allowed
         if (body === undefined && allowEmpty) return [];
         throw new ApiError('Unexpected response format from server.', {
           code: 'UNEXPECTED_FORMAT',
@@ -274,8 +282,23 @@ export async function fetchVoterList(
         });
       }
 
+      // handle Access Denied shape
+      if (
+        body &&
+        body.success === true &&
+        body.data &&
+        typeof body.data === 'object' &&
+        'is_accessible' in body.data &&
+        (body.data as any).is_accessible === 0
+      ) {
+        throw new ApiError(body.message || 'Access denied for this Android ID.', {
+          code: 'FORBIDDEN',
+          payload: body,
+          requestId,
+        });
+      }
+
       if (!body.success) {
-        // API explicitly says it failed
         throw new ApiError(body.message || 'Request failed.', {
           code: 'API_FAIL',
           payload: body,
@@ -297,7 +320,6 @@ export async function fetchVoterList(
 
       if (!isVoterArray(body.data)) {
         if (body.data.length === 0) {
-          // Treat empty as valid if allowed
           if (allowEmpty) return [];
           throw new ApiError(body.message || 'No voters found.', { code: 'NO_DATA', payload: body, requestId });
         }
@@ -316,22 +338,17 @@ export async function fetchVoterList(
       return body.data as Voter[];
     } catch (err) {
       lastErr = err;
-
-      // Normalize common low-level errors to ApiError with good codes
       const normalized = normalizeUnknownError(err, requestId);
-
       if (attempt < maxRetries && shouldRetry(normalized)) {
         attempt++;
         const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * attempt * attempt);
         await delay(jitter(backoff));
         continue;
       }
-
       throw normalized;
     }
   }
 
-  // If we somehow broke out without returning
   const normalized = normalizeUnknownError(lastErr);
   throw normalized;
 }
@@ -340,19 +357,17 @@ export function getVoterFromList(list: Voter[], voter_code: string) {
   return list.find(v => v.voter_code === voter_code);
 }
 
-/** Convert unknown errors into ApiError with stable codes */
 function normalizeUnknownError(err: unknown, requestId?: string): ApiError {
   if (err instanceof ApiError) return err;
-  if (err instanceof DOMException && err.name === 'AbortError') {
+  if (isAbortError(err)) {
     return new ApiError('The request timed out. Please try again.', {
       code: 'TIMEOUT',
       retriable: true,
-      cause: err,
+      cause: err as any,
       requestId,
     });
   }
   if (err instanceof TypeError) {
-    // RN network errors usually surface as TypeError
     return new ApiError('Network error. Check your connection and try again.', {
       code: 'NETWORK',
       retriable: true,
@@ -367,9 +382,9 @@ function normalizeUnknownError(err: unknown, requestId?: string): ApiError {
   });
 }
 
-/** Map ApiError to user-friendly copy for your toasts/prompts */
 export function errorToUserMessage(err: unknown): string {
   const e = normalizeUnknownError(err);
+
   switch (e.code) {
     case 'TIMEOUT':
       return 'Taking too long — please try again.';
@@ -380,6 +395,35 @@ export function errorToUserMessage(err: unknown): string {
     case 'AUTH':
       return 'Your session expired. Please sign in again.';
     case 'FORBIDDEN':
+      // 🔥 Custom alert for unauthorized devices
+      if (Platform.OS === 'android') {
+        (async () => {
+          try {
+            const androidId = await Application.getAndroidId();
+            if (androidId) {
+              Alert.alert(
+                'Access Denied',
+                `This device is not authorized to use the app.\n\nAndroid ID:\n${androidId}`
+              );
+            } else {
+              Alert.alert(
+                'Access Denied',
+                'This device is not authorized to use the app.\n(Android ID not available)'
+              );
+            }
+          } catch {
+            Alert.alert(
+              'Access Denied',
+              'This device is not authorized to use the app.\n(Failed to read Android ID)'
+            );
+          }
+        })();
+      } else {
+        Alert.alert(
+          'Access Denied',
+          'This device is not authorized to use the app.'
+        );
+      }
       return 'You don’t have access to this resource.';
     case 'NOT_FOUND':
       return 'We could not find what you’re looking for.';
